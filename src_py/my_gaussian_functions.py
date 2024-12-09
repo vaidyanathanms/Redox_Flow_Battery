@@ -12,6 +12,10 @@ import cclib
 import xml.etree.ElementTree as ET # For reading Avogadro cml/xml files
 from pathlib import Path
 
+# Constants
+hartoev = 27.21138505
+faraday = 9.64853321233100184e4 # in coulumbs/mol
+
 #---Generic function to copy files with *different* src/dest names
 def my_cpy_generic(srcdir,destdir,inpfylname,destfylname):
     src_fyl  = srcdir  + '/' + inpfylname
@@ -202,10 +206,11 @@ def gen_output_files(outdir,nmr_elem='None', flag_nmr = 0,\
 
     if flag_solv:
         fid_solv = open(outdir + '/all_solvation.dat','w')
-        fid_solv.write('%s\t %s\t %s\t %s\t %s\t %s\t %s\t %s\n'\
+        fid_solv.write('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n'\
                        %('Structure','Solvent','Nelecs',\
-                         'dGredox_gas','dGredox_sol',\
-                         'dGSolv_neutral','dGSolv_redox','RedoxPot'))        
+                         'Ginit_gas','Gredox_gas','Ginit_solv','Gredox_sol',\
+                         'dGredox_gas','dGSolv_neutral','dGSolv_redox',\
+                         'dGredox_sol','RedoxPot (Har/elec)','RedoxPot(V)'))        
 
     if flag_freq:
         fid_freq = open(outdir + '/freq_analysis.dat','w')
@@ -317,29 +322,41 @@ def write_solv_outputs(Geq_arr,structname,solvent,nelectrons=1,\
 
     fid_solv.write('%s\t%s\t%d\t' %(structname,solvent,nelectrons))
 
-    # Print warnings
+    # Write Geq values to outputs
     if Geq_arr[0] == None:
-        print('WARNING: neutral gas phase GFE not found\n')
+        print('WARNING: initial gas phase GFE not found\n')
+        fid_solv.write('NA\t')
+    else:
+        fid_solv.write(f'{Geq_arr[0]}\t')
+
+        
     if Geq_arr[1] == None:
         print('WARNING: redox gas phase GFE not found\n')
+        fid_solv.write('NA\t')
+    else:
+        fid_solv.write(f'{Geq_arr[1]}\t')
+
+
     if Geq_arr[2] == None:
-        print('WARNING: neutral sol phase GFE not found\n')
+        print('WARNING: initial sol phase GFE not found\n')
+        fid_solv.write('NA\t')
+    else:
+        fid_solv.write(f'{Geq_arr[2]}\t')
+
     if Geq_arr[3] == None:
         print('WARNING: redox sol phase GFE not found\n')
+        fid_solv.write('NA\t')
+    else:
+        fid_solv.write(f'{Geq_arr[3]}\t')
 
-    # Write to outputs
+
+    # Write dGsolv/dGredox/Eredox to outputs
     if Geq_arr[0] != None and Geq_arr[1] != None:
         delG_ox_gasp  = Geq_arr[1]-Geq_arr[0] #dG_redox gas phase
         fid_solv.write(f'{delG_ox_gasp}\t')
     else:
         fid_solv.write('NA\t')
-
-    if Geq_arr[3] != None and Geq_arr[2] != None:
-        delG_ox_solp = Geq_arr[3]-Geq_arr[2] #dG_redox sol phase
-        fid_solv.write(f'{delG_ox_solp}\t')
-    else:
-        fid_solv.write('NA\t')
-
+       
     if Geq_arr[2] != None and Geq_arr[0] != None:
         delG_solv_0  = Geq_arr[2]-Geq_arr[0]
         fid_solv.write(f'{delG_solv_0}\t') #dG_solv neutral species
@@ -348,13 +365,24 @@ def write_solv_outputs(Geq_arr,structname,solvent,nelectrons=1,\
         
     if Geq_arr[2] != None and Geq_arr[0] != None:
         delG_solv_redox = Geq_arr[3]-Geq_arr[1]
-        redox_pot = delG_solv_redox/nelectrons
         fid_solv.write(f'{delG_solv_redox}\t') #dG_solv redox species
-        fid_solv.write(f'{redox_pot}\n') #Redox pot.
     else:
         fid_solv.write('NA\t')
-        fid_solv.write('NA\n')   
+
+    if Geq_arr[3] != None and Geq_arr[2] != None:
+        delG_ox_solp = Geq_arr[3]-Geq_arr[2] 
+        redox_pot = delG_ox_solp/nelectrons
+        fid_solv.write(f'{delG_ox_solp}\t') #dG_redox sol phase (Hart/elec)
+        fid_solv.write(f'{redox_pot}\t') #Redox pot.
+        fid_solv.write(f'{-redox_pot*hartoev}\n') #dG_redox sol phase (V)
+    else:
+        fid_solv.write('NA\t')
+        fid_solv.write('NA\n')
+
         
+#---Write mol outputs
+#def write_mol_outputs(headdir,spec_struct=['e']):
+
 #---Find all possible combinations of structural directories
 def find_all_structs(headdir,spec_struct=['e']):
     if len(spec_struct) == 1:
@@ -362,16 +390,16 @@ def find_all_structs(headdir,spec_struct=['e']):
         if spec_struct[0] == 'all':
             for dirpath in glob.glob(headdir + '/*/'):
                 dirlist.append(os.path.basename(os.path.normpath(dirpath)))
-        elif len(spec_struct[0].split('-')) == 0: #single letter
-            for dirpath in glob.glob(headdir+'/'+spec_struct[0]+'*/'):
-                dirlist.append(os.path.basename(os.path.normpath(dirpath)))
-        elif len(spec_struct[0].split('-')) == 1: #range
-            alpharange = [chr(i) for i in range(ord(spec_struct[0].split('-')[0])\
+        elif len(spec_struct[0].split('-')) == 2: #range
+            alpharang = [chr(i) for i in range(ord(spec_struct[0].split('-')[0])\
                                                ,ord(spec_struct[0].split('-')[1])+1)]
-            for char in alpharange:
+            for char in alpharang:
                 allchardir = glob.glob(headdir + '/' + char + '*/')
                 for dirpath in allchardir:
                     dirlist.append(os.path.basename(os.path.normpath(dirpath)))
+        else: # Single character or word
+            for dirpath in glob.glob(headdir+'/'+spec_struct[0]+'*/'):
+                dirlist.append(os.path.basename(os.path.normpath(dirpath)))
         return dirlist
     else:
         return spec_struct

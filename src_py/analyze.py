@@ -27,6 +27,10 @@ from my_gaussian_functions import find_redox_type
 from my_gaussian_functions import write_solv_outputs
 from my_gaussian_functions import close_all_outfiles
 
+# Constants
+hartoev = 27.21138505
+faraday = 9.64853321233100184e4 # in coulumbs/mol
+
 #----Input flags-------------------------------------------
 flag_nmr   = 0  # Flag to compute NMR spectra
 flag_shift = 0  # Flag to compute NMR shift
@@ -37,19 +41,19 @@ flag_solv  = 1  # Flag to process DelG_Solv and Redox potential
 nmr_ref_elem    = 'P' # Reference element for NMR spectra
 nmr_refzero_dir = 'ref_H3PO4_q0' # Reference solution dir
 basis_fun       = 'B3LYP/6-31+G(d,p)' #basis function used
-nelectrons      = 2 # number of electrons transferred
+nelectrons      = 1 # number of electrons transferred
 
 #---------Input details------------------------------------
 solv_arr     = ['DME']#,'THF']#, 'DiethylEther', 'EthylEthanoate']
 # all, structs w/o .cml, single letter or initial to final letters
-spec_struct  = ['TDPA','TPPD','TMPD','DPPD']
+spec_struct  = ['DPPD']#,TDPA','TMPD','DPPD','TPPD','DME']
 phase_arr    = ['gphase','sphase']
-charge_arr   = ['q_0','q_p2']
+charge_arr   = ['Clq_p1','Clq_p2']
 
 #---------Directory info---------------------------------------
 maindir    = os.getcwd() #src_py dir
 scratchdir = '/scratch/vaidyams/mgrfb_analysis' #output dir
-scr_head   = 'w_and_wo_diffuse' # head dir for scratch outputs
+scr_head   = 'w_Mg_diffuse' # head dir for scratch outputs
 
 #---------Generate required output files-----------------------
 workdir1 = scratchdir + '/' + scr_head   
@@ -71,9 +75,6 @@ fid_nmr,fid_freq,fid_nbo,fid_eall,fid_eeqbm,fid_solv = \
                      flag_nmr,flag_freq,flag_nbo,flag_solv)
 
 #---------Main analysis---------------------------------------
-
-# Constants
-hartoev = 27.21138505
 
 # Analyze for different solvents
 for solvent in solv_arr:
@@ -166,7 +167,8 @@ for solvent in solv_arr:
                     write_nmr_outputs(fid_nmr,nmrvals,ref_nmrfreq,\
                                       flag_shift,all_data.freeenergy)
 
-#                if flag_mol: write_mol_outputs(fid_mol,all_data.moenergies)
+#                if flag_mol: write_mol_outputs(fid_mol,\
+#                                               all_data.moenergies)
 
                 if flag_solv:
                     Gid = find_redox_type(phase,charge)
@@ -174,6 +176,9 @@ for solvent in solv_arr:
                         print("Check folder path naming convention")
                         continue
                     Geq_arr[Gid] = all_data.freeenergy
+
+#                if flag_cspa:
+#                    fragcharges = compute_cspa(
 
             #---End of phase loop---
 
